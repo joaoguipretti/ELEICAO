@@ -56,7 +56,15 @@ export async function buscarResultados(cargoId, uf, signal) {
         : 'Não foi possível obter os dados do TSE agora.',
     );
   }
-  return normalizar(json, cargo, abrangencia);
+  return { id: `${cargoId}:${abrangencia}`, ...normalizar(json, cargo, abrangencia) };
+}
+
+// "04/10/2026" + "17:31:05" (horário de Brasília, UTC-3) -> timestamp em ms.
+function dataHoraTSE(data, hora) {
+  const [dia, mes, ano] = (data || '').split('/').map(Number);
+  const [h, m, s] = (hora || '').split(':').map(Number);
+  if (!dia || !mes || !ano || Number.isNaN(h)) return null;
+  return Date.UTC(ano, mes - 1, dia, h + 3, m || 0, s || 0);
 }
 
 // Transforma o JSON (bem enxuto e cheio de siglas) do TSE em algo fácil de usar na tela.
@@ -86,12 +94,13 @@ function normalizar(json, cargo, abrangencia) {
         })),
       ),
     )
-    .sort((a, b) => b.votos - a.votos || a.nome.localeCompare(b.nome));
+    .sort((a, b) => b.votos - a.votos || a.nome.localeCompare(b.nome, 'pt-BR'));
 
   return {
     cargo: carg.nmn,
     vagas: inteiro(carg.nv) || 1,
     atualizadoEm: json.dg && json.hg ? `${json.dg} ${json.hg}` : null,
+    geradoEm: dataHoraTSE(json.dg, json.hg),
     secoes: {
       total: inteiro(json.s.ts),
       totalizadas: inteiro(json.s.st),
