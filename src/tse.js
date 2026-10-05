@@ -1,23 +1,44 @@
 const TSE_BASE = 'https://resultados.tse.jus.br/oficial/ele2026';
 const TEMPO_LIMITE_MS = 10_000;
 
-// Códigos oficiais do 1º turno de 2026 (fonte: /oficial/comum/config/ele-c.json).
-// Para o 2º turno (25/10), troque 6257 -> 6258 e 6259 -> 6260.
-const CARGOS_TSE = {
-  presidente: { eleicao: '6257', codigo: 1 },
-  governador: { eleicao: '6259', codigo: 3 },
-  senador: { eleicao: '6259', codigo: 5 },
+// Códigos oficiais de 2026 (fonte: /oficial/comum/config/ele-c.json). No 2º turno só há
+// presidente e governador (nos estados onde ninguém passou de 50% no 1º).
+const TURNOS = {
+  1: {
+    presidente: { eleicao: '6257', codigo: 1 },
+    governador: { eleicao: '6259', codigo: 3 },
+    senador: { eleicao: '6259', codigo: 5 },
+  },
+  2: {
+    presidente: { eleicao: '6258', codigo: 1 },
+    governador: { eleicao: '6260', codigo: 3 },
+  },
 };
+
+// Dia de cada turno: a linha do tempo começa às 17h (fechamento das urnas) desse dia.
+const DATAS = { 1: { dia: 4, mes: 10 }, 2: { dia: 25, mes: 10 } };
+
+// Turno em andamento, pela variável de ambiente VITE_TURNO (padrão: 1). No dia 25/10, basta
+// definir VITE_TURNO=2 no Vercel e publicar de novo. O site (Vite) lê de import.meta.env;
+// a função do servidor (Node), de process.env.
+const turnoConfigurado =
+  import.meta.env?.VITE_TURNO ?? (typeof process !== 'undefined' ? process.env?.VITE_TURNO : undefined);
+export const TURNO = Number(turnoConfigurado) === 2 ? 2 : 1;
+export const CARGOS_TSE = TURNOS[TURNO];
+export const INICIO_APURACAO = Date.UTC(2026, DATAS[TURNO].mes - 1, DATAS[TURNO].dia, 17 + 3);
 
 const pad = (valor, tamanho) => String(valor).padStart(tamanho, '0');
 const inteiro = (s) => Number(s || 0);
 const percentual = (s) => Number(String(s || '0').replace(',', '.'));
 
 // Busca o resultado direto do TSE. `uf` = null para cargos nacionais (presidente).
-export async function buscarResultados(cargoId, uf, signal) {
-  const cargo = CARGOS_TSE[cargoId];
+// `turno` permite buscar o 1º turno durante o 2º (para a comparação); `municipio` é o código
+// TSE (5 dígitos) de uma cidade do estado `uf`.
+export async function buscarResultados(cargoId, uf, signal, turno = TURNO, municipio = null) {
+  const cargo = TURNOS[turno][cargoId];
   const abrangencia = uf ? uf.toLowerCase() : 'br';
-  const arquivo = `${abrangencia}-c${pad(cargo.codigo, 4)}-e${pad(cargo.eleicao, 6)}-u.json`;
+  const prefixo = `${abrangencia}${municipio ?? ''}`;
+  const arquivo = `${prefixo}-c${pad(cargo.codigo, 4)}-e${pad(cargo.eleicao, 6)}-u.json`;
   // `nocache` faz o navegador não reaproveitar a cópia local (o app oficial do TSE faz igual).
   // A CDN do TSE ignora esse parâmetro, então não gera carga extra no servidor deles.
   const url = `${TSE_BASE}/${cargo.eleicao}/dados/${abrangencia}/${arquivo}?nocache=${Date.now()}`;
@@ -50,13 +71,33 @@ export async function buscarResultados(cargoId, uf, signal) {
   }
 
   if (!resposta.ok) {
-    throw new Error(
+    const erro = new Error(
       resposta.status === 404
         ? 'O TSE ainda não publicou esse resultado.'
-        : 'Não foi possível obter os dados do TSE agora.',
+        : resposta.status === 429
+          ? 'O TSE está limitando o acesso agora. Tentando de novo em instantes…'
+          : 'Não foi possível obter os dados do TSE agora.',
     );
+    erro.status = resposta.status; // o servidor usa isso para pausar se o TSE pedir (429)
+    throw erro;
   }
-  return { id: `${cargoId}:${abrangencia}`, ...normalizar(json, cargo, abrangencia) };
+  return { id: `${cargoId}:${prefixo}`, ...normalizar(json, cargo, abrangencia) };
+}
+
+// Lista de cidades do TSE: { SP: [{ cd: '62910', cdi: '3509502', nm: 'CAMPINAS' }, ...], ... }.
+// `cd` é o código do TSE (usado nos arquivos de resultado); `cdi`, o do IBGE (usado na malha).
+export async function buscarListaDeCidades(signal, turno = TURNO) {
+  const eleicao = TURNOS[turno].presidente.eleicao;
+  const resposta = await fetch(`${TSE_BASE}/${eleicao}/config/mun-e${pad(eleicao, 6)}-cm.json`, { signal });
+  if (!resposta.ok) {
+    const erro = new Error(`Lista de cidades: o TSE respondeu ${resposta.status}`);
+    erro.status = resposta.status;
+    throw erro;
+  }
+  const json = await resposta.json();
+  return Object.fromEntries(
+    json.abr.map((a) => [a.cd.toUpperCase(), a.mu.map(({ cd, cdi, nm }) => ({ cd, cdi, nm }))]),
+  );
 }
 
 // "04/10/2026" + "17:31:05" (horário de Brasília, UTC-3) -> timestamp em ms.
@@ -90,7 +131,8 @@ function normalizar(json, cargo, abrangencia) {
           situacao: c.st || null,
           // Destinação do voto: "Válido" ou, p.ex., "Anulado" (candidatura indeferida).
           votosAnulados: c.dvt && !/^v[aá]lido/i.test(c.dvt) ? c.dvt : null,
-          foto: `${TSE_BASE}/${cargo.eleicao}/fotos/${abrangencia}/${c.sqcand}.jpeg`,
+          // Fotos de cargo nacional (presidente) só existem na pasta br.
+          foto: `${TSE_BASE}/${cargo.eleicao}/fotos/${cargo.codigo === 1 ? 'br' : abrangencia}/${c.sqcand}.jpeg`,
         })),
       ),
     )
@@ -108,6 +150,7 @@ function normalizar(json, cargo, abrangencia) {
     },
     eleitorado: {
       total: inteiro(json.e.te),
+      faltam: inteiro(json.e.esnt), // eleitores das seções ainda não totalizadas
       comparecimento: inteiro(json.e.c),
       percentualComparecimento: percentual(json.e.pc),
       abstencao: inteiro(json.e.a),

@@ -3,15 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c0c0c" />
+    <meta name="description" content="Apuração das Eleições 2026 em tempo real, com dados oficiais do TSE." />
     <title>Apuração 2026</title>
     <script>
-      // Aplica o tema antes de pintar a página (evita piscar branco no tema escuro).
-      // Usa a escolha salva; se não houver, segue o tema do sistema.
+      // Aplica o tema antes de pintar (evita piscar): escolha salva ou o tema do sistema.
       (function () {
         var salvo = null;
         try { salvo = localStorage.getItem('tema'); } catch (e) {}
-        var escuro = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        document.documentElement.dataset.theme = salvo || (escuro ? 'dark' : 'light');
+        var claro = window.matchMedia('(prefers-color-scheme: light)').matches;
+        document.documentElement.dataset.theme = salvo || (claro ? 'light' : 'dark');
       })();
     </script>
   </head>
