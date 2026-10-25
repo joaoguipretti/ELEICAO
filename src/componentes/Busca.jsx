@@ -1,13 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Foto from './Foto.jsx';
 import { IconeBusca, IconeFechar } from './Icones.jsx';
-import { nomeProprio, siglaPartido } from '../lib/formato.js';
-
-const semAcento = (s) =>
-  s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase();
+import { nomeProprio, semAcento, siglaPartido } from '../lib/formato.js';
 
 // Busca (Ctrl+K): estados e candidatos. Escolher um leva direto para ele.
 export default function Busca({ itens, onEscolher, onFechar }) {
@@ -47,7 +41,7 @@ export default function Busca({ itens, onEscolher, onFechar }) {
             }}
             onKeyDown={teclas}
             placeholder="Buscar um estado ou cidade"
-            className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-texto-3"
+            className="h-12 flex-1 bg-transparent text-sm outline-none max-md:text-base placeholder:text-texto-3"
             aria-label="Buscar um estado ou cidade"
           />
           <button onClick={onFechar} className="text-texto-2 hover:text-texto" aria-label="Fechar">

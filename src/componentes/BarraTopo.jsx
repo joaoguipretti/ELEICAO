@@ -24,7 +24,7 @@ function BotaoTema() {
 
 export default function BarraTopo({ selo, abas, cargo, onCargo, onBuscar, onBaixar }) {
   return (
-    <header className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 border-b border-borda px-5 py-2.5 lg:grid-cols-[1fr_auto_1fr]">
+    <header className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 border-b border-borda px-5 py-2.5 lg:grid-cols-[1fr_auto_1fr] max-md:px-4">
       <div className="flex items-center gap-2.5">
         <span className="text-lg font-semibold tracking-tight">Apuração 2026</span>
         <span className="rounded-md border border-dashed border-borda px-2 py-0.5 text-xs text-texto-2">{selo}</span>

@@ -27,10 +27,10 @@ export default function LinhaDoTempo({ inicio, momentos, momento, agora, onMudar
   const aoVivo = momento == null;
 
   return (
-    <div className="flex items-center gap-4">
-      <div className="numeros w-[92px] shrink-0 text-xl font-medium">{relogio(aoVivo ? agora : momento)}</div>
+    <div className="flex items-center gap-4 max-md:flex-wrap max-md:gap-y-2">
+      <div className="numeros w-[92px] shrink-0 text-xl font-medium max-md:flex-1">{relogio(aoVivo ? agora : momento)}</div>
 
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 max-md:order-last max-md:basis-full">
         <div
           ref={trilho}
           className="relative h-5 cursor-pointer touch-none"

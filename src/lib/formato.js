@@ -55,3 +55,10 @@ export function abreviado(n) {
   if (n >= 1e3) return `${numero.format(Math.round(n / 1e3))} mil`;
   return numero.format(Math.round(n));
 }
+
+// Para buscas: "São Paulo" → "sao paulo".
+export const semAcento = (s) =>
+  s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase();

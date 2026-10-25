@@ -7,8 +7,10 @@ import Mapa from './componentes/Mapa.jsx';
 import Placar from './componentes/Placar.jsx';
 import { Participacao, UltimasAtualizacoes, Viradas } from './componentes/ColunaEsquerda.jsx';
 import { ListaEstados, Regioes } from './componentes/ColunaDireita.jsx';
+import { AbasCelular, ListaCidades, Trilha } from './componentes/Celular.jsx';
 import { IconeSetaEsquerda } from './componentes/Icones.jsx';
 import { useApuracao } from './useApuracao.js';
+import { useCelular } from './useCelular.js';
 import { usePrimeiroTurno } from './usePrimeiroTurno.js';
 import { carregarCidades, useCidade, useMunicipios } from './useMunicipios.js';
 import { CARGOS_TSE, INICIO_APURACAO, TURNO } from './tse.js';
@@ -154,13 +156,18 @@ export default function App() {
   const [buscaAberta, setBuscaAberta] = useState(false);
   const [listaCidades, setListaCidades] = useState(null);
   const agora = useAgora();
+  const celular = useCelular();
 
   const presidente = useApuracao('presidente');
   const outro = useApuracao(cargo === 'presidente' ? null : cargo);
   const primeiroPresidente = usePrimeiroTurno('presidente');
   const primeiroOutro = usePrimeiroTurno(cargo === 'presidente' ? null : cargo);
   const primeiroTurno = cargo === 'presidente' ? primeiroPresidente : primeiroOutro;
-  const municipios = useMunicipios(cargo === 'presidente' && recorte !== 'estados');
+  // No celular não há mapa: as cidades só aparecem como lista, depois de escolher um estado.
+  const municipios = useMunicipios(
+    cargo === 'presidente' && (celular ? Boolean(selecionado) && selecionado !== 'zz' : recorte !== 'estados'),
+    !celular,
+  );
   const resultadoCidade = useCidade(cargo === 'presidente' ? cidade : null);
 
   const visoesPresidente = useMemo(() => visoesDe(presidente, momento), [presidente, momento]);
@@ -169,10 +176,13 @@ export default function App() {
   const nacional = visoesPresidente.br;
   const candidatosNacionais = nacional?.candidatos ?? [];
 
-  // Governador sem estado escolhido: mostra o maior eleitorado com apuração (normalmente SP).
+  // Governador sem estado escolhido: mostra o maior eleitorado com apuração (normalmente SP);
+  // antes de a apuração começar, o maior eleitorado entre os estados com disputa.
   const padraoGovernador = useMemo(() => {
-    const comVotos = Object.values(visoesOutro).filter((v) => v?.comecou);
-    return comVotos.sort((a, b) => (b.eleitorado ?? 0) - (a.eleitorado ?? 0))[0]?.abr ?? null;
+    const todas = Object.values(visoesOutro).filter(Boolean);
+    const comVotos = todas.filter((v) => v.comecou);
+    const candidatas = comVotos.length ? comVotos : todas;
+    return candidatas.sort((a, b) => (b.eleitorado ?? 0) - (a.eleitorado ?? 0))[0]?.abr ?? null;
   }, [visoesOutro]);
 
   // O que o placar mostra: cidade > estado escolhido > Brasil (ou o estado padrão, em governador).
@@ -268,6 +278,9 @@ export default function App() {
     setSelecionado(null);
   }
 
+  // Celular: depois de escolher um lugar na lista, sobe para o placar dele.
+  const subir = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+
   const itensBusca = useMemo(() => {
     const itens = Object.entries(UFS).map(([sigla, nome]) => ({
       chave: `uf-${sigla}`,
@@ -324,6 +337,18 @@ export default function App() {
         onBaixar={() => baixarCsv(cargo, visoes)}
       />
 
+      {celular && (
+        <Trilha
+          estado={selecionado}
+          cidade={cidade}
+          rotuloInicial={cargo === 'presidente' ? 'Brasil' : 'Escolha um estado na lista'}
+          momento={momento}
+          onBrasil={voltarAoBrasil}
+          onEstado={() => setCidade(null)}
+          onAoVivo={() => setMomento(null)}
+        />
+      )}
+
       <Placar
         visao={visaoPlacar}
         cargoNome={cargo === 'presidente' ? 'Presidente' : 'Governador'}
@@ -337,107 +362,189 @@ export default function App() {
         </div>
       )}
 
-      <main className="grid flex-1 xl:min-h-0 xl:grid-cols-[350px_minmax(0,1fr)_390px]">
-        {/* Esquerda */}
-        <aside className="rolagem order-2 space-y-7 border-t border-borda px-5 py-5 xl:order-none xl:min-h-0 xl:overflow-y-auto xl:border-t-0 xl:border-r">
-          <GraficoApuracao
-            pontos={abrPrincipal ? fonteGrafico.pontos[abrPrincipal] : []}
-            candidatos={(abrPrincipal && visoes[abrPrincipal]?.candidatos) || []}
-            momento={momento}
-            viradas={viradasGrafico}
+      {celular ? (
+        <>
+          <AbasCelular
+            abas={[
+              {
+                id: 'lugares',
+                nome: cargo === 'presidente' && selecionado && selecionado !== 'zz' ? 'Cidades' : 'Estados',
+                conteudo:
+                  cargo === 'presidente' && selecionado && selecionado !== 'zz' ? (
+                    <ListaCidades
+                      key={selecionado}
+                      uf={selecionado}
+                      municipios={municipios}
+                      par={par}
+                      candidatos={candidatosNacionais}
+                      cidadeSelecionada={cidade?.cdi ?? null}
+                      onEscolher={(info) => {
+                        escolherCidade(info);
+                        subir();
+                      }}
+                      onVoltar={voltarAoBrasil}
+                    />
+                  ) : (
+                    <>
+                      {cargo === 'presidente' && <Regioes regioes={regioes} par={par} />}
+                      <ListaEstados
+                        visoes={visoes}
+                        par={par}
+                        selecionado={selecionado}
+                        onSelecionar={(abr) => {
+                          selecionarLugar(abr);
+                          subir();
+                        }}
+                      />
+                    </>
+                  ),
+              },
+              {
+                id: 'apuracao',
+                nome: 'Apuração',
+                conteudo: (
+                  <>
+                    <LinhaDoTempo
+                      inicio={INICIO_APURACAO}
+                      momentos={momentos}
+                      momento={momento}
+                      agora={agora}
+                      onMudar={setMomento}
+                      viradas={cargo === 'presidente' ? viradasNacionais : []}
+                    />
+                    <GraficoApuracao
+                      pontos={abrPrincipal ? fonteGrafico.pontos[abrPrincipal] : []}
+                      candidatos={(abrPrincipal && visoes[abrPrincipal]?.candidatos) || []}
+                      momento={momento}
+                      viradas={viradasGrafico}
+                    />
+                    <Participacao visao={visaoPlacar} />
+                  </>
+                ),
+              },
+              {
+                id: 'atualizacoes',
+                nome: 'Atualizações',
+                conteudo: (
+                  <>
+                    <Viradas viradas={todasViradas} />
+                    <UltimasAtualizacoes eventos={eventos} />
+                  </>
+                ),
+              },
+            ]}
           />
-          <Participacao visao={visaoPlacar} />
-          <Viradas viradas={todasViradas} />
-          <UltimasAtualizacoes eventos={eventos} />
-        </aside>
-
-        {/* Centro: mapa */}
-        <section className="order-1 flex flex-col gap-3 px-5 py-4 xl:order-none xl:min-h-0">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              {selecionado && (
-                <button onClick={voltarAoBrasil} className="flex items-center gap-1 self-center text-xs text-texto-2 hover:text-texto">
-                  <IconeSetaEsquerda width={14} height={14} /> Brasil
-                </button>
-              )}
-              <h2 className="text-lg font-semibold">{tituloMapa}</h2>
-              <span className="text-xs text-texto-3">{dica}</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {cargo === 'presidente' && (
-                <div className="segmentado">
-                  {[
-                    ['estados', 'Estados'],
-                    ['municipios', 'Municípios'],
-                    ['eleitorado', 'Eleitorado'],
-                  ].map(([id, nome]) => (
-                    <button key={id} aria-pressed={recorte === id} onClick={() => setRecorte(id)}>
-                      {nome}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className="segmentado">
-                <button aria-pressed={colorir === 'lider'} onClick={() => setColorir('lider')}>
-                  Quem lidera
-                </button>
-                <button aria-pressed={colorir === 'apurado'} onClick={() => setColorir('apurado')}>
-                  Apurado
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="relative aspect-square max-h-[80vh] w-full xl:aspect-auto xl:h-auto xl:max-h-none xl:min-h-0 xl:flex-1">
-            <Mapa
-              cargo={cargo}
-              visoes={visoes}
-              recorte={cargo === 'presidente' ? recorte : 'estados'}
-              colorir={colorir}
-              selecionado={selecionado}
-              onSelecionar={selecionarLugar}
-              onRecentrar={voltarAoBrasil}
-              mostrarExterior={cargo === 'presidente'}
-              primeiroTurno={primeiroTurno}
-              municipios={cargo === 'presidente' ? municipios : null}
-              candidatos={candidatosNacionais}
-              cidadeSelecionada={cidade?.cdi ?? null}
-              onSelecionarCidade={escolherCidade}
-            />
-          </div>
-
-          <Legenda
-            cargo={cargo}
-            colorir={colorir}
-            porCidade={porCidade}
-            municipios={municipios}
-            candidatos={candidatosNacionais}
-            visoes={visoes}
-          />
-
-          <LinhaDoTempo
-            inicio={INICIO_APURACAO}
-            momentos={momentos}
-            momento={momento}
-            agora={agora}
-            onMudar={setMomento}
-            viradas={cargo === 'presidente' ? viradasNacionais : []}
-          />
-        </section>
-
-        {/* Direita */}
-        <aside className="rolagem order-3 space-y-7 border-t border-borda px-5 py-5 xl:min-h-0 xl:overflow-y-auto xl:border-t-0 xl:border-l">
-          {cargo === 'presidente' && <Regioes regioes={regioes} par={par} />}
-          <ListaEstados visoes={visoes} par={par} selecionado={selecionado} onSelecionar={selecionarLugar} />
-          <p className="text-[11px] text-texto-3">
+          <footer className="border-t border-borda px-4 py-4 text-[11px] text-texto-3">
             Dados oficiais do{' '}
             <a href="https://resultados.tse.jus.br" target="_blank" rel="noreferrer" className="underline">
               TSE
             </a>
             . Site independente, sem vínculo com o TSE.
-          </p>
-        </aside>
-      </main>
+          </footer>
+        </>
+      ) : (
+        <main className="grid flex-1 xl:min-h-0 xl:grid-cols-[350px_minmax(0,1fr)_390px]">
+          {/* Esquerda */}
+          <aside className="rolagem order-2 space-y-7 border-t border-borda px-5 py-5 xl:order-none xl:min-h-0 xl:overflow-y-auto xl:border-t-0 xl:border-r">
+            <GraficoApuracao
+              pontos={abrPrincipal ? fonteGrafico.pontos[abrPrincipal] : []}
+              candidatos={(abrPrincipal && visoes[abrPrincipal]?.candidatos) || []}
+              momento={momento}
+              viradas={viradasGrafico}
+            />
+            <Participacao visao={visaoPlacar} />
+            <Viradas viradas={todasViradas} />
+            <UltimasAtualizacoes eventos={eventos} />
+          </aside>
+
+          {/* Centro: mapa */}
+          <section className="order-1 flex flex-col gap-3 px-5 py-4 xl:order-none xl:min-h-0">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                {selecionado && (
+                  <button onClick={voltarAoBrasil} className="flex items-center gap-1 self-center text-xs text-texto-2 hover:text-texto">
+                    <IconeSetaEsquerda width={14} height={14} /> Brasil
+                  </button>
+                )}
+                <h2 className="text-lg font-semibold">{tituloMapa}</h2>
+                <span className="text-xs text-texto-3">{dica}</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {cargo === 'presidente' && (
+                  <div className="segmentado">
+                    {[
+                      ['estados', 'Estados'],
+                      ['municipios', 'Municípios'],
+                      ['eleitorado', 'Eleitorado'],
+                    ].map(([id, nome]) => (
+                      <button key={id} aria-pressed={recorte === id} onClick={() => setRecorte(id)}>
+                        {nome}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="segmentado">
+                  <button aria-pressed={colorir === 'lider'} onClick={() => setColorir('lider')}>
+                    Quem lidera
+                  </button>
+                  <button aria-pressed={colorir === 'apurado'} onClick={() => setColorir('apurado')}>
+                    Apurado
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="relative aspect-square max-h-[80vh] w-full xl:aspect-auto xl:h-auto xl:max-h-none xl:min-h-0 xl:flex-1">
+              <Mapa
+                cargo={cargo}
+                visoes={visoes}
+                recorte={cargo === 'presidente' ? recorte : 'estados'}
+                colorir={colorir}
+                selecionado={selecionado}
+                onSelecionar={selecionarLugar}
+                onRecentrar={voltarAoBrasil}
+                mostrarExterior={cargo === 'presidente'}
+                primeiroTurno={primeiroTurno}
+                municipios={cargo === 'presidente' ? municipios : null}
+                candidatos={candidatosNacionais}
+                cidadeSelecionada={cidade?.cdi ?? null}
+                onSelecionarCidade={escolherCidade}
+              />
+            </div>
+
+            <Legenda
+              cargo={cargo}
+              colorir={colorir}
+              porCidade={porCidade}
+              municipios={municipios}
+              candidatos={candidatosNacionais}
+              visoes={visoes}
+            />
+
+            <LinhaDoTempo
+              inicio={INICIO_APURACAO}
+              momentos={momentos}
+              momento={momento}
+              agora={agora}
+              onMudar={setMomento}
+              viradas={cargo === 'presidente' ? viradasNacionais : []}
+            />
+          </section>
+
+          {/* Direita */}
+          <aside className="rolagem order-3 space-y-7 border-t border-borda px-5 py-5 xl:min-h-0 xl:overflow-y-auto xl:border-t-0 xl:border-l">
+            {cargo === 'presidente' && <Regioes regioes={regioes} par={par} />}
+            <ListaEstados visoes={visoes} par={par} selecionado={selecionado} onSelecionar={selecionarLugar} />
+            <p className="text-[11px] text-texto-3">
+              Dados oficiais do{' '}
+              <a href="https://resultados.tse.jus.br" target="_blank" rel="noreferrer" className="underline">
+                TSE
+              </a>
+              . Site independente, sem vínculo com o TSE.
+            </p>
+          </aside>
+        </main>
+      )}
 
       {buscaAberta && <Busca itens={itensBusca} onEscolher={escolherNaBusca} onFechar={() => setBuscaAberta(false)} />}
     </div>

@@ -10,7 +10,7 @@ function parDe(visao, par) {
   return par.map((n) => visao.candidatos.find((c) => c.numero === n)).filter(Boolean);
 }
 
-function BarraDividida({ a, b }) {
+export function BarraDividida({ a, b }) {
   return (
     <div className="relative h-1 w-16 shrink-0 rounded-full bg-trilho">
       {a && (

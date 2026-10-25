@@ -67,7 +67,8 @@ async function buscarTodosOsEstados(signal, turno) {
 }
 
 // Mapa por município: malha, nomes e o resumo de cada cidade (vem do servidor, que lê o TSE).
-export function useMunicipios(ativo) {
+// Sem malha (celular): só os números das cidades, para a lista.
+export function useMunicipios(ativo, comMalha = true) {
   const [malha, setMalha] = useState(null);
   const [nomes, setNomes] = useState(null);
   const [dados, setDados] = useState({});
@@ -76,16 +77,18 @@ export function useMunicipios(ativo) {
   useEffect(() => {
     if (!ativo) return;
     let vivo = true;
-    carregarMalha()
-      .then((m) => vivo && setMalha(m))
-      .catch(() => {});
+    if (comMalha) {
+      carregarMalha()
+        .then((m) => vivo && setMalha(m))
+        .catch(() => {});
+    }
     carregarCidades()
       .then((n) => vivo && setNomes(n))
       .catch(() => {});
     return () => {
       vivo = false;
     };
-  }, [ativo]);
+  }, [ativo, comMalha]);
 
   useEffect(() => {
     if (!ativo) return;
