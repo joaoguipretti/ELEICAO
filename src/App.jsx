@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import BarraTopo from './componentes/BarraTopo.jsx';
 import Busca from './componentes/Busca.jsx';
 import GraficoApuracao from './componentes/GraficoApuracao.jsx';
@@ -440,6 +441,7 @@ export default function App() {
       </main>
 
       {buscaAberta && <Busca itens={itensBusca} onEscolher={escolherNaBusca} onFechar={() => setBuscaAberta(false)} />}
+      <Analytics />
     </div>
   );
 }
